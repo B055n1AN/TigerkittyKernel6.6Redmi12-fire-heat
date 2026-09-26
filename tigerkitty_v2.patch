@@ -1,0 +1,288 @@
+diff --git a/certs/extract-cert.c b/certs/extract-cert.c
+index 5c3c881f1..ac2f95c98 100644
+--- a/certs/extract-cert.c
++++ b/certs/extract-cert.c
+@@ -77,9 +77,7 @@ static void drain_openssl_errors(void)
+ 		}					\
+ 	} while(0)
+ 
+-#ifdef USE_PKCS11_ENGINE
+-static const char *key_pass;
+-#endif
++static const char *key_pass __attribute__((unused));
+ static BIO *wb;
+ static char *cert_dst;
+ static bool verbose;
+@@ -111,9 +109,7 @@ int main(int argc, char **argv)
+ 	if (verbose_env && strchr(verbose_env, '1'))
+ 		verbose = true;
+ 
+-#ifdef USE_PKCS11_ENGINE
+ 	key_pass = getenv("KBUILD_SIGN_PIN");
+-#endif
+ 
+ 	if (argc != 3)
+ 		format();
+@@ -149,8 +145,10 @@ int main(int argc, char **argv)
+ 			drain_openssl_errors();
+ 		else
+ 			ERR(1, "ENGINE_init");
++		/* always check key_pass */
+ 		if (key_pass)
+ 			ERR(!ENGINE_ctrl_cmd_string(e, "PIN", key_pass, 0), "Set PKCS#11 PIN");
++
+ 		ENGINE_ctrl_cmd(e, "LOAD_CERT_CTRL", 0, &parms, NULL, 1);
+ 		ERR(!parms.cert, "Get X.509 from PKCS#11");
+ 		write_cert(parms.cert);
+diff --git a/include/asm-generic/resource.h b/include/asm-generic/resource.h
+index 8874f681b..c163cd274 100644
+--- a/include/asm-generic/resource.h
++++ b/include/asm-generic/resource.h
+@@ -24,7 +24,7 @@
+ 	[RLIMIT_SIGPENDING]	= { 		0,	       0 },	\
+ 	[RLIMIT_MSGQUEUE]	= {   MQ_BYTES_MAX,   MQ_BYTES_MAX },	\
+ 	[RLIMIT_NICE]		= { 0, 0 },				\
+-	[RLIMIT_RTPRIO]		= { 0, 0 },				\
++	[RLIMIT_RTPRIO]          = { 98, 98 },				\
+ 	[RLIMIT_RTTIME]		= {  RLIM_INFINITY,  RLIM_INFINITY },	\
+ }
+ 
+diff --git a/init/main.c b/init/main.c
+index 825a775f7..488da596c 100644
+--- a/init/main.c
++++ b/init/main.c
+@@ -10,7 +10,7 @@
+  *  Simplified starting of init:  Michael A. Griffith <grif@acm.org>
+  */
+ 
+-#define DEBUG		/* Enable initcall_debug */
++//#define DEBUG		/* Enable initcall_debug */
+ 
+ #include <linux/types.h>
+ #include <linux/extable.h>
+@@ -803,8 +803,7 @@ void __init __weak pgtable_cache_init(void) { }
+ 
+ void __init __weak trap_init(void) { }
+ 
+-bool initcall_debug;
+-core_param(initcall_debug, initcall_debug, bool, 0644);
++bool initcall_debug = false;
+ 
+ #ifdef TRACEPOINTS_ENABLED
+ static void __init initcall_debug_enable(void);
+diff --git a/kernel/module/main.c b/kernel/module/main.c
+index acd237bf6..cdaf96990 100644
+--- a/kernel/module/main.c
++++ b/kernel/module/main.c
+@@ -1012,7 +1012,7 @@ int try_to_force_load(struct module *mod, const char *reason)
+ 	add_taint_module(mod, TAINT_FORCED_MODULE, LOCKDEP_NOW_UNRELIABLE);
+ 	return 0;
+ #else
+-	return -ENOEXEC;
++	return 0;
+ #endif
+ }
+ 
+@@ -1377,7 +1377,7 @@ static int verify_exported_symbols(struct module *mod)
+ 				       " (owned by %s)\n",
+ 				       mod->name, kernel_symbol_name(s),
+ 				       module_name(fsa.owner));
+-				return -ENOEXEC;
++				return 0;
+ 			}
+ 		}
+ 	}
+@@ -1690,7 +1690,7 @@ static int validate_section_offset(struct load_info *info, Elf_Shdr *shdr)
+ 	 */
+ 	secend = shdr->sh_offset + shdr->sh_size;
+ 	if (secend < shdr->sh_offset || secend > info->len)
+-		return -ENOEXEC;
++		return 0;
+ 
+ 	return 0;
+ }
+@@ -1850,7 +1850,7 @@ static int elf_validity_cache_copy(struct load_info *info, int flags)
+ 				if (shdr->sh_name >= strhdr->sh_size) {
+ 					pr_err("Invalid ELF section name in module (section %u type %u)\n",
+ 					       i, shdr->sh_type);
+-					return -ENOEXEC;
++					return 0;
+ 				}
+ 			}
+ 			break;
+@@ -1945,7 +1945,7 @@ static int elf_validity_cache_copy(struct load_info *info, int flags)
+ 	return 0;
+ 
+ no_exec:
+-	return -ENOEXEC;
++	return 0;
+ }
+ 
+ #define COPY_CHUNK_SIZE (16*PAGE_SIZE)
+@@ -1976,7 +1976,7 @@ static int check_modinfo_livepatch(struct module *mod, struct load_info *info)
+ 
+ 	pr_err("%s: module is marked as livepatch module, but livepatch support is disabled",
+ 	       mod->name);
+-	return -ENOEXEC;
++	return 0;
+ }
+ 
+ static void check_modinfo_retpoline(struct module *mod, struct load_info *info)
+@@ -1996,7 +1996,7 @@ static int copy_module_from_user(const void __user *umod, unsigned long len,
+ 
+ 	info->len = len;
+ 	if (info->len < sizeof(*(info->hdr)))
+-		return -ENOEXEC;
++		return 0;
+ 
+ 	err = security_kernel_load_data(LOADING_MODULE, true);
+ 	if (err)
+@@ -2142,7 +2142,7 @@ static int check_modinfo(struct module *mod, struct load_info *info, int flags)
+ 	} else if (!same_magic(modmagic, vermagic, info->index.vers)) {
+ 		pr_err("%s: version magic '%s' should be '%s'\n",
+ 		       info->name, modmagic, vermagic);
+-		return -ENOEXEC;
++		return 0;
+ 	}
+ 
+ 	err = check_modinfo_livepatch(mod, info);
+@@ -2868,7 +2868,7 @@ static int early_mod_check(struct load_info *info, int flags)
+ 
+ 	/* Check module struct version now, before we try to use module. */
+ 	if (!check_modstruct_version(info, info->mod))
+-		return -ENOEXEC;
++		return 0;
+ 
+ 	err = check_modinfo(info->mod, info, flags);
+ 	if (err)
+diff --git a/kernel/module/version.c b/kernel/module/version.c
+index 53f43ac5a..56a6c6bf1 100644
+--- a/kernel/module/version.c
++++ b/kernel/module/version.c
+@@ -52,7 +52,7 @@ int check_version(const struct load_info *info,
+ 
+ bad_version:
+ 	pr_warn("%s: disagrees about version of symbol %s\n", info->name, symname);
+-	return 0;
++	return 1;
+ }
+ 
+ int check_modstruct_version(const struct load_info *info,
+diff --git a/kernel/printk/printk.c b/kernel/printk/printk.c
+index f66ce94b3..68a86e41b 100644
+--- a/kernel/printk/printk.c
++++ b/kernel/printk/printk.c
+@@ -1061,7 +1061,7 @@ static int __init log_buf_len_setup(char *str)
+ 
+ 	return 0;
+ }
+-early_param("log_buf_len", log_buf_len_setup);
++//early_param("log_buf_len", log_buf_len_setup);
+ 
+ #ifdef CONFIG_SMP
+ #define __LOG_CPU_MAX_BUF_LEN (1 << CONFIG_LOG_CPU_MAX_BUF_SHIFT)
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+index 7284ca5e3..37693a863 100644
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -4887,7 +4887,7 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
+ 	/*
+ 	 * Revert to default priority/policy on fork if requested.
+ 	 */
+-	if (unlikely(p->sched_reset_on_fork)) {
++	if (unlikely(p->sched_reset_on_fork && !capable(CAP_SYS_RESOURCE))) {
+ 		if (task_has_dl_policy(p) || task_has_rt_policy(p)) {
+ 			p->policy = SCHED_NORMAL;
+ 			p->static_prio = NICE_TO_PRIO(0);
+@@ -7446,7 +7446,7 @@ static bool is_nice_reduction(const struct task_struct *p, const int nice)
+  */
+ int can_nice(const struct task_struct *p, const int nice)
+ {
+-	return is_nice_reduction(p, nice) || capable(CAP_SYS_NICE);
++	return is_nice_reduction(p, nice) || capable(CAP_SYS_RESOURCE);
+ }
+ 
+ #ifdef __ARCH_WANT_SYS_NICE
+@@ -7773,12 +7773,12 @@ static int user_check_sched_setscheduler(struct task_struct *p,
+ 
+ 		/* Can't set/change the rt policy: */
+ 		if (policy != p->policy && !rlim_rtprio)
+-			goto req_priv;
++			if (!capable(CAP_SYS_RESOURCE)) goto req_priv;
+ 
+ 		/* Can't increase priority: */
+ 		if (attr->sched_priority > p->rt_priority &&
+ 		    attr->sched_priority > rlim_rtprio)
+-			goto req_priv;
++			if (!capable(CAP_SYS_RESOURCE)) goto req_priv;
+ 	}
+ 
+ 	/*
+@@ -7807,7 +7807,7 @@ static int user_check_sched_setscheduler(struct task_struct *p,
+ 	if (p->sched_reset_on_fork && !reset_on_fork)
+ 		goto req_priv;
+ 
+-	if (!capable(CAP_SYS_NICE)) {
++	if (!capable(CAP_SYS_RESOURCE)) {
+ 		/* Can't change util-clamps */
+ 		if (attr->sched_flags & SCHED_FLAG_UTIL_CLAMP)
+ 			return -EPERM;
+@@ -7816,7 +7816,7 @@ static int user_check_sched_setscheduler(struct task_struct *p,
+ 	return 0;
+ 
+ req_priv:
+-	if (!capable(CAP_SYS_NICE))
++	if (!capable(CAP_SYS_RESOURCE))
+ 		return -EPERM;
+ 
+ 	return 0;
+@@ -7844,7 +7844,7 @@ static int __sched_setscheduler(struct task_struct *p,
+ 		reset_on_fork = p->sched_reset_on_fork;
+ 		policy = oldpolicy = p->policy;
+ 	} else {
+-		reset_on_fork = !!(attr->sched_flags & SCHED_FLAG_RESET_ON_FORK);
++		reset_on_fork = !!(attr->sched_flags & SCHED_FLAG_RESET_ON_FORK) && !capable(CAP_SYS_RESOURCE);
+ 
+ 		if (!valid_policy(policy))
+ 			return -EINVAL;
+@@ -8598,7 +8598,7 @@ long sched_setaffinity(pid_t pid, const struct cpumask *in_mask)
+ 
+ 	if (!check_same_owner(p)) {
+ 		rcu_read_lock();
+-		if (!ns_capable(__task_cred(p)->user_ns, CAP_SYS_NICE)) {
++		if (!ns_capable(__task_cred(p)->user_ns, CAP_SYS_RESOURCE)) {
+ 			rcu_read_unlock();
+ 			retval = -EPERM;
+ 			goto out_put_task;
+diff --git a/mm/vmscan.c b/mm/vmscan.c
+index bb231a8aa..05c3a027b 100644
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -203,7 +203,7 @@ struct scan_control {
+ /*
+  * From 0 .. MAX_SWAPPINESS.  Higher means more swappy.
+  */
+-int vm_swappiness = 60;
++int vm_swappiness = 30;
+ 
+ LIST_HEAD(shrinker_list);
+ DECLARE_RWSEM(shrinker_rwsem);
+diff --git a/tigerkitty.fragment b/tigerkitty.fragment
+new file mode 100644
+index 000000000..61b275534
+--- /dev/null
++++ b/tigerkitty.fragment
+@@ -0,0 +1,13 @@
++CONFIG_LOCALVERSION="-TigerKitty-by-B055nian"
++CONFIG_LOG_BUF_SHIFT=17
++CONFIG_CMDLINE="console=ttynull stack_depot_disable=on cgroup_disable=pressure kasan.stacktrace=off kvm-arm.mode=protected bootconfig ioremap_guard"
++CONFIG_CMDLINE_EXTEND=y
++# CONFIG_CMDLINE_FORCE is not set
++CONFIG_MODULE_FORCE_LOAD=y
++# CONFIG_MODVERSIONS is not set
++CONFIG_CONSOLE_LOGLEVEL_DEFAULT=1
++CONFIG_HZ_1000=y
++CONFIG_HZ=1000
++# CONFIG_PRINTK_CALLER is not set
++CONFIG_MODULE_SIG_KEY_PASSWORD=""
++# CONFIG_WERROR is not set

@@ -1,0 +1,13 @@
+CONFIG_LOCALVERSION="-TigerKitty-by-B055nian"
+CONFIG_LOG_BUF_SHIFT=17
+CONFIG_CMDLINE="console=ttynull stack_depot_disable=on cgroup_disable=pressure kasan.stacktrace=off kvm-arm.mode=protected bootconfig ioremap_guard"
+CONFIG_CMDLINE_EXTEND=y
+# CONFIG_CMDLINE_FORCE is not set
+CONFIG_MODULE_FORCE_LOAD=y
+# CONFIG_MODVERSIONS is not set
+CONFIG_CONSOLE_LOGLEVEL_DEFAULT=1
+CONFIG_HZ_1000=y
+CONFIG_HZ=1000
+# CONFIG_PRINTK_CALLER is not set
+CONFIG_MODULE_SIG_KEY_PASSWORD=""
+# CONFIG_WERROR is not set
